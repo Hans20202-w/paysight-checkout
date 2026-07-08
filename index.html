@@ -185,9 +185,14 @@
     var statusEl = document.getElementById('status');
     function setStatus(kind, text) { statusEl.className = 'show ' + kind; statusEl.textContent = text; }
     function val(id) { var el = document.getElementById(id); return el ? el.value.trim() : ''; }
+    // Only include fields that actually have a value, so the widget doesn't
+    // reject empty strings on init. Country always has a default selection.
     function customerFromForm() {
-      return { email: val('email'), firstName: val('firstName'), lastName: val('lastName'),
+      var raw = { email: val('email'), firstName: val('firstName'), lastName: val('lastName'),
         address: val('address'), city: val('city'), state: val('state'), zip: val('zip'), country: val('country') };
+      var c = {};
+      Object.keys(raw).forEach(function (k) { if (raw[k]) c[k] = raw[k]; });
+      return c;
     }
     function makeSessionId() { return 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10); }
 
