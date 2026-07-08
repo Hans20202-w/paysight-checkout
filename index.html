@@ -62,6 +62,11 @@
     .grand .lbl { font-size: 16px; font-weight: 600; }
     .grand .amt { font-size: 22px; font-weight: 700; } .grand .cur { font-size: 12px; color: var(--muted); margin-right: 6px; }
     .empty { color: var(--muted); font-size: 14px; }
+    .terms { display: flex; align-items: flex-start; gap: 9px; font-size: 14px; margin: 16px 0 12px; color: var(--ink); }
+    .terms input { margin-top: 3px; width: 16px; height: 16px; flex: none; }
+    .pay-btn { width: 100%; padding: 15px; border: none; border-radius: var(--radius); background: #1a1a1a;
+      color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .pay-btn:disabled { opacity: .45; cursor: not-allowed; }
     @media (max-width: 900px) {
       .checkout { grid-template-columns: 1fr; }
       .aside { order: -1; border-bottom: 1px solid var(--line); } .main { border-right: none; }
@@ -117,6 +122,8 @@
             <div class="pay-head">🔒 Credit card</div>
             <div id="payment-container"></div>
           </div>
+          <label class="terms"><input type="checkbox" id="accept-terms" /> <span>I accept the <a href="#">terms and conditions</a></span></label>
+          <button id="pay-btn" class="pay-btn" disabled>Pay Now</button>
           <div id="status" role="status" aria-live="polite"></div>
         </section>
 
@@ -212,6 +219,7 @@
           amount: 0,                    // computed from cart lines
           currency: 'USD',
           customer: customerFromForm(),
+          hidePaymentButton: true,      // use our own Pay button gated by the terms checkbox
           shopify: { showCart: false, cart: CART, shipping: SHIPPING }
         },
         onReady: function () {},
@@ -221,6 +229,15 @@
       ['email','firstName','lastName','address','city','state','zip','country'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('blur', function () { if (widget && widget.update) widget.update({ customer: customerFromForm() }); });
+      });
+
+      // Terms checkbox gates our own Pay button, which triggers the widget.
+      var terms = document.getElementById('accept-terms');
+      var payBtn = document.getElementById('pay-btn');
+      terms.addEventListener('change', function () { payBtn.disabled = !terms.checked; });
+      payBtn.addEventListener('click', function () {
+        if (!terms.checked) return;
+        if (widget && widget.submitPayment) { payBtn.disabled = true; widget.submitPayment(); }
       });
     }
 
@@ -239,13 +256,21 @@
           setStatus('ok', 'Payment successful! Order ' + (p.orderId || p.transactionId || '') + ' confirmed. Thank you.');
           break;
         }
-        case 'PAYMENT_ERROR':
+        case 'PAYMENT_ERROR': {
+          var pb = document.getElementById('pay-btn');
+          var tc = document.getElementById('accept-terms');
+          if (pb && tc) pb.disabled = !tc.checked;
           setStatus('err', 'Payment failed: ' + ((message.payload && message.payload.message) || 'Please check your card details and try again.'));
           break;
-        case 'ERROR':
+        }
+        case 'ERROR': {
+          var pb2 = document.getElementById('pay-btn');
+          var tc2 = document.getElementById('accept-terms');
+          if (pb2 && tc2) pb2.disabled = !tc2.checked;
           setStatus('err', 'Error ' + (message.payload && message.payload.code ? '(' + message.payload.code + ')' : '') +
             ': ' + (message.payload && message.payload.message ? message.payload.message : 'Validation failed.'));
           break;
+        }
         case 'PAYMENT_3DS_START': setStatus('info', 'Verifying with your bank (3-D Secure)…'); break;
       }
     }
