@@ -67,6 +67,7 @@
     .pay-btn { width: 100%; padding: 15px; border: none; border-radius: var(--radius); background: #1a1a1a;
       color: #fff; font-size: 16px; font-weight: 600; cursor: pointer; }
     .pay-btn:disabled { opacity: .45; cursor: not-allowed; }
+    .descriptor { font-size: 12px; color: var(--muted); text-align: center; margin: 12px 0 0; }
     @media (max-width: 900px) {
       .checkout { grid-template-columns: 1fr; }
       .aside { order: -1; border-bottom: 1px solid var(--line); } .main { border-right: none; }
@@ -122,12 +123,17 @@
             <div class="pay-head">🔒 Credit card</div>
             <div id="payment-container"></div>
           </div>
-          <label class="terms"><input type="checkbox" id="accept-terms" /> <span>I accept the <a href="#">terms and conditions</a></span></label>
+          <label class="terms"><input type="checkbox" id="accept-terms" /> <span>I accept the <a href="https://tryslumberkiddies.com/policies/terms-of-service" target="_blank" rel="noopener">terms and conditions</a></span></label>
           <button id="pay-btn" class="pay-btn" disabled>Pay Now</button>
+          <p class="descriptor">Charges appear as <strong>TRYSLUMBERKIDDIES</strong> on your statement.</p>
           <div id="status" role="status" aria-live="polite"></div>
         </section>
 
-        <div class="footer-links"><a href="#">Refund policy</a> · <a href="#">Privacy policy</a> · <a href="#">Terms of service</a></div>
+        <div class="footer-links">
+          <a href="https://tryslumberkiddies.com/policies/refund-policy" target="_blank" rel="noopener">Refund policy</a> ·
+          <a href="https://tryslumberkiddies.com/policies/privacy-policy" target="_blank" rel="noopener">Privacy policy</a> ·
+          <a href="https://tryslumberkiddies.com/policies/terms-of-service" target="_blank" rel="noopener">Terms of service</a>
+        </div>
       </div>
     </div>
 
