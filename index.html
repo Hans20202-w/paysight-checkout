@@ -141,6 +141,7 @@
       <div class="aside-inner">
         <div id="cart-lines"></div>
         <div class="totline"><span class="muted" id="subtotal-lbl">Subtotal</span><span id="subtotal">$0.00</span></div>
+        <div class="totline" id="disc-row" style="display:none"><span class="muted">Loyalty discount (30%)</span><span id="disc-amt" style="color:var(--ok);font-weight:600">−$0.00</span></div>
         <div class="totline"><span class="muted">Shipping</span><span>Free</span></div>
         <div class="divider"></div>
         <div class="grand"><span class="lbl">Total</span><span><span class="cur">USD</span><span class="amt" id="grand-total">$0.00</span></span></div>
@@ -170,6 +171,28 @@
     var CART = readCartFromUrl();      // [{product, variant, quantity, price, name, description, imageUrl}]
     var SHIPPING = { product: 0, name: 'Standard Shipping', price: 0 };
 
+    // ===== Loyalty opt-in (30% off) ========================================
+    // Detected via: cookie set by the product-page snippet (works across the
+    // .tryslumberkiddies.com subdomains), the _loyalty_member line property
+    // (if the cart handoff includes properties), or ?loyal=1 as manual override.
+    var LOYAL =
+      /(?:^|;\s*)loyalty_optin=1(?:;|$)/.test(document.cookie) ||
+      CART.some(function (i) {
+        var p = i.properties || {};
+        return p._loyalty_member === 'true' || p._loyalty_member === true;
+      }) ||
+      new URLSearchParams(location.search).get('loyal') === '1';
+
+    var LOYALTY_RATE = 0.30;
+    // Cart actually sent to the payment widget: per-line discounted prices,
+    // so the amount charged always matches the summary shown.
+    var CHARGE_CART = CART.map(function (i) {
+      if (!LOYAL) return i;
+      var c = {}; for (var k in i) c[k] = i[k];
+      c.price = Math.round((i.price || 0) * (1 - LOYALTY_RATE) * 100) / 100;
+      return c;
+    });
+
     // ===== Render the order-summary sidebar from the live cart =============
     function money(n) { return '$' + Number(n || 0).toFixed(2); }
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
@@ -177,7 +200,8 @@
     function renderSummary() {
       var host = document.getElementById('cart-lines');
       if (!CART.length) { host.innerHTML = '<div class="empty">Your cart is empty. Add items on the store, then click Checkout.</div>'; return; }
-      var subtotal = 0, count = 0, html = '';
+      var subtotal = 0, chargeTotal = 0, count = 0, html = '';
+      CHARGE_CART.forEach(function (i) { chargeTotal += (i.price || 0) * (i.quantity || 1); });
       CART.forEach(function (i) {
         subtotal += (i.price || 0) * (i.quantity || 1);
         count += (i.quantity || 1);
@@ -190,7 +214,14 @@
       host.innerHTML = html;
       document.getElementById('subtotal-lbl').textContent = 'Subtotal · ' + count + ' item' + (count === 1 ? '' : 's');
       document.getElementById('subtotal').textContent = money(subtotal);
-      document.getElementById('grand-total').textContent = money(subtotal + (SHIPPING.price || 0));
+      var discRow = document.getElementById('disc-row');
+      if (LOYAL && subtotal > chargeTotal) {
+        discRow.style.display = 'flex';
+        document.getElementById('disc-amt').textContent = '−' + money(subtotal - chargeTotal);
+      } else {
+        discRow.style.display = 'none';
+      }
+      document.getElementById('grand-total').textContent = money(chargeTotal + (SHIPPING.price || 0));
     }
     renderSummary();
 
@@ -226,7 +257,7 @@
           currency: 'USD',
           customer: customerFromForm(),
           hidePaymentButton: true,      // use our own Pay button gated by the terms checkbox
-          shopify: { showCart: false, cart: CART, shipping: SHIPPING }
+          shopify: { showCart: false, cart: CHARGE_CART, shipping: SHIPPING }
         },
         onReady: function () {},
         onError: function (err) { setStatus('err', 'Could not initialize payment: ' + (err && err.message ? err.message : err)); },
