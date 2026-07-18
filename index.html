@@ -123,6 +123,23 @@
             <div class="pay-head">🔒 Credit card</div>
             <div id="payment-container"></div>
           </div>
+          <!-- Loyalty membership disclosure — shown ONLY when the loyalty discount is active,
+               so non-members never see (or are bound by) enrollment language. -->
+          <div id="loyalty-disclosure" style="display:none;border:1.5px solid var(--ink);border-radius:8px;padding:16px 18px;margin:16px 0 4px">
+            <div style="font-weight:700;text-align:center;font-size:15px;margin-bottom:10px">Slumberkiddies Loyalty Program</div>
+            <p style="font-size:13.5px;line-height:1.55;margin:0;color:var(--ink)">
+              Your 30% Loyalty discount is applied to this order. By completing your purchase, you're
+              joining the Slumberkiddies Loyalty Program: your membership starts with a
+              <strong>20-day free trial</strong>, and after the trial the payment method you provide today
+              will be charged <strong>$29.99 USD every month</strong> (plus any applicable taxes) until you
+              cancel. You can cancel at any time — in your
+              <a href="https://tryslumberkiddies.com/account" target="_blank" rel="noopener">account</a> or by
+              emailing <a href="mailto:support@tryslumberkiddies.com">support@tryslumberkiddies.com</a> —
+              and you won't be charged again after cancelling. Full details are in our
+              <a href="https://tryslumberkiddies.com/policies/terms-of-service" target="_blank" rel="noopener">Terms of Service</a>.
+              Prefer to skip the membership? Remove the discount code above and pay full price with no enrollment.
+            </p>
+          </div>
           <label class="terms"><input type="checkbox" id="accept-terms" /> <span>I accept the <a href="https://tryslumberkiddies.com/policies/terms-of-service" target="_blank" rel="noopener">terms and conditions</a></span></label>
           <button id="pay-btn" class="pay-btn" disabled>Pay Now</button>
           <p class="descriptor">Charges appear as <strong>TRYSLUMBERKIDDIES</strong> on your statement.</p>
@@ -217,9 +234,10 @@
       var msg = document.getElementById('disc-msg');
       var code = input.value.trim().toUpperCase();
       msg.style.display = 'none';
-      if (!code) { // cleared: fall back to the loyalty opt-in state
-        RATE = LOYAL ? LOYALTY_RATE : 0;
-        APPLIED_CODE = LOYAL ? LOYALTY_CODE : null;
+      if (!code) { // cleared: full opt-out — drop the discount AND the membership enrollment
+        LOYAL = false;
+        RATE = 0;
+        APPLIED_CODE = null;
         refreshCharge();
         return;
       }
@@ -270,6 +288,9 @@
         discRow.style.display = 'none';
       }
       document.getElementById('grand-total').textContent = money(chargeTotal + (SHIPPING.price || 0));
+      // Membership enrollment disclosure: visible only while the loyalty discount is active.
+      var ld = document.getElementById('loyalty-disclosure');
+      if (ld) ld.style.display = (RATE && CART.length) ? 'block' : 'none';
     }
     renderSummary();
     if (APPLIED_CODE) document.getElementById('disc-code').value = APPLIED_CODE;
