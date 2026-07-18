@@ -140,8 +140,15 @@
     <div class="aside">
       <div class="aside-inner">
         <div id="cart-lines"></div>
+        <div style="display:flex;gap:8px;margin:0 0 14px">
+          <input id="disc-code" type="text" placeholder="Discount code" autocapitalize="characters" autocomplete="off"
+            style="flex:1;padding:12px;border:1px solid var(--field-line);border-radius:var(--radius);font-size:14px" />
+          <button type="button" onclick="applyDiscountCode()"
+            style="padding:0 16px;border:1px solid var(--field-line);background:#f1f1f1;border-radius:var(--radius);font-size:14px;cursor:pointer;color:#555">Apply</button>
+        </div>
+        <div id="disc-msg" style="display:none;color:var(--err);font-size:13px;margin:-6px 0 12px">Enter a valid discount code</div>
         <div class="totline"><span class="muted" id="subtotal-lbl">Subtotal</span><span id="subtotal">$0.00</span></div>
-        <div class="totline" id="disc-row" style="display:none"><span class="muted">Loyalty discount (30%)</span><span id="disc-amt" style="color:var(--ok);font-weight:600">−$0.00</span></div>
+        <div class="totline" id="disc-row" style="display:none"><span class="muted" id="disc-lbl">Loyalty discount (30%)</span><span id="disc-amt" style="color:var(--ok);font-weight:600">−$0.00</span></div>
         <div class="totline"><span class="muted">Shipping</span><span>Free</span></div>
         <div class="divider"></div>
         <div class="grand"><span class="lbl">Total</span><span><span class="cur">USD</span><span class="amt" id="grand-total">$0.00</span></span></div>
@@ -184,14 +191,53 @@
       new URLSearchParams(location.search).get('loyal') === '1';
 
     var LOYALTY_RATE = 0.30;
+    var LOYALTY_CODE = 'LOYAL30-X7K2';
+    // Discount codes accepted at this checkout (code -> rate).
+    var DISCOUNT_CODES = {};
+    DISCOUNT_CODES[LOYALTY_CODE] = LOYALTY_RATE;
+
+    var RATE = LOYAL ? LOYALTY_RATE : 0;
+    var APPLIED_CODE = LOYAL ? LOYALTY_CODE : null;
+
     // Cart actually sent to the payment widget: per-line discounted prices,
     // so the amount charged always matches the summary shown.
-    var CHARGE_CART = CART.map(function (i) {
-      if (!LOYAL) return i;
-      var c = {}; for (var k in i) c[k] = i[k];
-      c.price = Math.round((i.price || 0) * (1 - LOYALTY_RATE) * 100) / 100;
-      return c;
-    });
+    function buildChargeCart() {
+      return CART.map(function (i) {
+        if (!RATE) return i;
+        var c = {}; for (var k in i) c[k] = i[k];
+        c.price = Math.round((i.price || 0) * (1 - RATE) * 100) / 100;
+        return c;
+      });
+    }
+    var CHARGE_CART = buildChargeCart();
+
+    // ===== Discount code box ===============================================
+    function applyDiscountCode() {
+      var input = document.getElementById('disc-code');
+      var msg = document.getElementById('disc-msg');
+      var code = input.value.trim().toUpperCase();
+      msg.style.display = 'none';
+      if (!code) { // cleared: fall back to the loyalty opt-in state
+        RATE = LOYAL ? LOYALTY_RATE : 0;
+        APPLIED_CODE = LOYAL ? LOYALTY_CODE : null;
+        refreshCharge();
+        return;
+      }
+      if (DISCOUNT_CODES.hasOwnProperty(code)) {
+        RATE = DISCOUNT_CODES[code];
+        APPLIED_CODE = code;
+        input.value = code;
+        refreshCharge();
+      } else {
+        msg.textContent = 'Enter a valid discount code';
+        msg.style.display = 'block';
+      }
+    }
+    function refreshCharge() {
+      CHARGE_CART = buildChargeCart();
+      renderSummary();
+      remountWidget(); // the widget charges from its own cart copy — rebuild it
+    }
 
     // ===== Render the order-summary sidebar from the live cart =============
     function money(n) { return '$' + Number(n || 0).toFixed(2); }
@@ -215,8 +261,10 @@
       document.getElementById('subtotal-lbl').textContent = 'Subtotal · ' + count + ' item' + (count === 1 ? '' : 's');
       document.getElementById('subtotal').textContent = money(subtotal);
       var discRow = document.getElementById('disc-row');
-      if (LOYAL && subtotal > chargeTotal) {
+      if (RATE && subtotal > chargeTotal) {
         discRow.style.display = 'flex';
+        document.getElementById('disc-lbl').textContent =
+          (APPLIED_CODE ? 'Discount (' + APPLIED_CODE + ')' : 'Loyalty discount') + ' — ' + Math.round(RATE * 100) + '%';
         document.getElementById('disc-amt').textContent = '−' + money(subtotal - chargeTotal);
       } else {
         discRow.style.display = 'none';
@@ -224,6 +272,10 @@
       document.getElementById('grand-total').textContent = money(chargeTotal + (SHIPPING.price || 0));
     }
     renderSummary();
+    if (APPLIED_CODE) document.getElementById('disc-code').value = APPLIED_CODE;
+    document.getElementById('disc-code').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); applyDiscountCode(); }
+    });
 
     // ===== Status + customer helpers ======================================
     var statusEl = document.getElementById('status');
@@ -242,11 +294,7 @@
 
     // ===== Mount the Paysight widget in Shopify cart mode =================
     var widget;
-    if (typeof PaySightSDK === 'undefined' || !PaySightSDK.createWidget) {
-      setStatus('err', 'Payment SDK failed to load. Check that widget-sdk.js is reachable.');
-    } else if (!CART.length) {
-      setStatus('err', 'No cart was received. Start from the store and click Checkout.');
-    } else {
+    function mountWidget() {
       widget = PaySightSDK.createWidget({
         targetId: 'payment-container',
         config: {
@@ -263,6 +311,20 @@
         onError: function (err) { setStatus('err', 'Could not initialize payment: ' + (err && err.message ? err.message : err)); },
         onMessage: handleMessage
       });
+    }
+    // Re-create the widget after a discount changes CHARGE_CART, so the amount
+    // charged always matches the summary. No-op before the SDK is ready.
+    function remountWidget() {
+      if (typeof PaySightSDK === 'undefined' || !PaySightSDK.createWidget || !CART.length) return;
+      document.getElementById('payment-container').innerHTML = '';
+      mountWidget();
+    }
+    if (typeof PaySightSDK === 'undefined' || !PaySightSDK.createWidget) {
+      setStatus('err', 'Payment SDK failed to load. Check that widget-sdk.js is reachable.');
+    } else if (!CART.length) {
+      setStatus('err', 'No cart was received. Start from the store and click Checkout.');
+    } else {
+      mountWidget();
       ['email','firstName','lastName','address','city','state','zip','country'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.addEventListener('blur', function () { if (widget && widget.update) widget.update({ customer: customerFromForm() }); });
